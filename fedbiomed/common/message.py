@@ -1040,7 +1040,7 @@ class UnlearnRequest(RequestReply, RequiresProtocolVersion):
 
     researcher_id: str
     experiment_id: str
-    forget_node_ids: List[str]
+    forget_node_ids: List
     mode: str = "sifu"
     dry_run: bool = True
     from_round: Optional[int] = None
@@ -1058,7 +1058,7 @@ class UnlearnReply(RequestReply, RequiresProtocolVersion):
     node_id: str
     node_name: str
     msg: str
-    forget_node_ids: Optional[List[str]] = None
+    forget_node_ids: Optional[List] = None
     dry_run: bool = True
     from_round: Optional[int] = None
     to_round: Optional[int] = None

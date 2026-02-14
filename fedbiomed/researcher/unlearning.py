@@ -7,39 +7,31 @@ from typing import Dict, List, Optional
 
 from fedbiomed.common.constants import ErrorNumbers
 from fedbiomed.common.exceptions import FedbiomedExperimentError
+from fedbiomed.common.logger import logger
+from fedbiomed.common.message import UnlearnRequest
+from fedbiomed.researcher.requests import MessagesByNode
 
 
 class UnlearningManager:
-    """Provides planning scaffolding for unlearning workflows.
+    """Provides planning and request dispatch scaffolding for unlearning workflows.
 
-    This class intentionally limits itself to dry-run planning and basic
-    eligibility checks. Actual SIFU update execution is introduced in a
-    follow-up iteration.
+    This class currently supports:
+      - dry-run plan generation (researcher-side)
+      - node request dispatch for dry-run and non-dry-run modes
+
+    Actual SIFU parameter update execution on researcher/model weights is introduced
+    in a follow-up iteration.
     """
 
     def __init__(self, experiment) -> None:
         self._experiment = experiment
 
-    def plan_unlearning(
+    def _validate_inputs(
         self,
         node_ids: List[str],
-        from_round: Optional[int] = None,
-        mode: str = "sifu",
-    ) -> Dict:
-        """Builds a dry-run unlearning plan.
-
-        Args:
-            node_ids: IDs of nodes to forget.
-            from_round: Earliest round to unlearn from. If None, starts from round 0.
-            mode: Unlearning mode identifier.
-
-        Returns:
-            Dict describing the plan and basic constraints.
-
-        Raises:
-            FedbiomedExperimentError: for invalid inputs.
-        """
-
+        from_round: Optional[int],
+        mode: str,
+    ) -> None:
         if not isinstance(node_ids, list) or not node_ids or not all(
             isinstance(node_id, str) for node_id in node_ids
         ):
@@ -60,6 +52,16 @@ class UnlearningManager:
             raise FedbiomedExperimentError(
                 ErrorNumbers.FB410.value + ": `mode` must be a non-empty string"
             )
+
+    def plan_unlearning(
+        self,
+        node_ids: List[str],
+        from_round: Optional[int] = None,
+        mode: str = "sifu",
+    ) -> Dict:
+        """Builds a dry-run unlearning plan."""
+
+        self._validate_inputs(node_ids=node_ids, from_round=from_round, mode=mode)
 
         known_nodes = set(self._experiment.filtered_federation_nodes())
         unknown_nodes = [node_id for node_id in node_ids if node_id not in known_nodes]
@@ -93,6 +95,51 @@ class UnlearningManager:
             "eligible": len(unknown_nodes) == 0,
         }
 
+    def _send_unlearning_requests(
+        self,
+        forget_node_ids: List[str],
+        mode: str,
+        dry_run: bool,
+        from_round: Optional[int],
+        to_round: Optional[int],
+    ) -> Dict:
+        """Sends unlearning requests to selected nodes and returns replies/errors."""
+
+        target_nodes = self._experiment.filtered_federation_nodes()
+        if len(target_nodes) == 0:
+            raise FedbiomedExperimentError(
+                ErrorNumbers.FB411.value
+                + ": missing node(s) required for unlearning request dispatch"
+            )
+
+        messages = MessagesByNode()
+        for node_id in target_nodes:
+            messages[node_id] = UnlearnRequest(
+                researcher_id=self._experiment.researcher_id,
+                experiment_id=self._experiment._experiment_id,
+                forget_node_ids=forget_node_ids,
+                mode=mode,
+                dry_run=dry_run,
+                from_round=from_round,
+                to_round=to_round,
+            )
+
+        with self._experiment.requests.send(messages, target_nodes, None) as federated_req:
+            errors = federated_req.errors()
+            replies = federated_req.replies()
+
+        for node_id, error in errors.items():
+            logger.warning(
+                "Error message received during unlearning request for "
+                f"node={node_id}: {error.errnum}. {error.extra_msg}"
+            )
+
+        return {
+            "sent_to_nodes": target_nodes,
+            "errors": {node_id: err.get_dict() for node_id, err in errors.items()},
+            "replies": {node_id: reply.get_dict() for node_id, reply in replies.items()},
+        }
+
     def unlearn(
         self,
         node_ids: List[str],
@@ -100,17 +147,28 @@ class UnlearningManager:
         mode: str = "sifu",
         dry_run: bool = True,
     ) -> Dict:
-        """Executes (or plans) unlearning.
+        """Runs (or plans) federated unlearning.
 
-        Current implementation supports dry-run planning only.
+        Returns:
+            A dictionary containing the unlearning plan and node replies.
         """
 
         plan = self.plan_unlearning(node_ids=node_ids, from_round=from_round, mode=mode)
 
-        if not dry_run:
-            raise FedbiomedExperimentError(
-                ErrorNumbers.FB601.value
-                + ": SIFU unlearning execution is not implemented yet; use dry_run=True"
-            )
+        request_result = self._send_unlearning_requests(
+            forget_node_ids=node_ids,
+            mode=mode,
+            dry_run=dry_run,
+            from_round=plan["from_round"],
+            to_round=plan["to_round"],
+        )
 
-        return plan
+        return {
+            "plan": plan,
+            "request": {
+                "dry_run": dry_run,
+                "sent_to_nodes": request_result["sent_to_nodes"],
+            },
+            "errors": request_result["errors"],
+            "replies": request_result["replies"],
+        }

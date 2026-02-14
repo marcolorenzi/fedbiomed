@@ -617,18 +617,21 @@ class Node:
                                 status="success",
                             )
                         case UnlearnRequest.__name__:
+                            success = bool(item.dry_run)
+                            message = (
+                                "Unlearning dry-run request accepted by node"
+                                if item.dry_run
+                                else "Unlearning execution is not implemented on node yet"
+                            )
                             self._grpc_client.send(
                                 UnlearnReply(
                                     request_id=item.request_id,
                                     researcher_id=item.researcher_id,
                                     experiment_id=item.experiment_id,
-                                    success=False,
+                                    success=success,
                                     node_id=self._node_id,
                                     node_name=self._node_name,
-                                    msg=(
-                                        "Unlearning endpoint scaffold is available, but execution "
-                                        "is not implemented on node yet"
-                                    ),
+                                    msg=message,
                                     forget_node_ids=item.forget_node_ids,
                                     dry_run=item.dry_run,
                                     from_round=item.from_round,
