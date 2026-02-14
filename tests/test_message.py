@@ -73,6 +73,35 @@ def test_preproc_reply_message_creation():
     )
 
 
+def test_unlearn_request_message_creation():
+    """Test UnlearnRequest message creation"""
+    _ = message.UnlearnRequest(
+        researcher_id="researcher_1234",
+        experiment_id="experiment_1234",
+        forget_node_ids=["node_1", "node_2"],
+        mode="sifu",
+        dry_run=True,
+        from_round=0,
+        to_round=12,
+    )
+
+
+def test_unlearn_reply_message_creation():
+    """Test UnlearnReply message creation"""
+    _ = message.UnlearnReply(
+        researcher_id="researcher_1234",
+        experiment_id="experiment_1234",
+        success=False,
+        node_id="node_1234",
+        node_name="node_name_1234",
+        msg="not implemented",
+        forget_node_ids=["node_1"],
+        dry_run=True,
+        from_round=0,
+        to_round=12,
+    )
+
+
 class TestMessage(unittest.TestCase):
     """
     Test the Message class
@@ -109,6 +138,8 @@ class TestMessage(unittest.TestCase):
             message.TrainingPlanStatusReply,
             message.TrainingPlanStatusRequest,
             message.ApprovalRequest,
+            message.UnlearnRequest,
+            message.UnlearnReply,
         ]
 
         # test minimal python (only affectation) to insure

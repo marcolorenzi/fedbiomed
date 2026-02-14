@@ -1025,6 +1025,47 @@ class TrainReply(RequestReply, RequiresProtocolVersion):
 
 @catch_dataclass_exception
 @dataclass
+class UnlearnRequest(RequestReply, RequiresProtocolVersion):
+    """Describes an unlearning message sent by the researcher.
+
+    Attributes:
+        researcher_id: ID of the researcher that requests unlearning
+        experiment_id: Id of the experiment linked to the request
+        forget_node_ids: IDs of nodes whose contribution should be forgotten
+        mode: unlearning mode (eg. `sifu`)
+        dry_run: if True, request is for planning only
+        from_round: Optional start round of the unlearning window
+        to_round: Optional end round of the unlearning window
+    """
+
+    researcher_id: str
+    experiment_id: str
+    forget_node_ids: List[str]
+    mode: str = "sifu"
+    dry_run: bool = True
+    from_round: Optional[int] = None
+    to_round: Optional[int] = None
+
+
+@catch_dataclass_exception
+@dataclass
+class UnlearnReply(RequestReply, RequiresProtocolVersion):
+    """Describes an unlearning reply sent by the node."""
+
+    researcher_id: str
+    experiment_id: str
+    success: bool
+    node_id: str
+    node_name: str
+    msg: str
+    forget_node_ids: Optional[List[str]] = None
+    dry_run: bool = True
+    from_round: Optional[int] = None
+    to_round: Optional[int] = None
+
+
+@catch_dataclass_exception
+@dataclass
 class PreprocRequest(RequestReply, RequiresProtocolVersion):
     """Message for requesting pre-processing job from researcher to node.
 

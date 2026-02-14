@@ -36,6 +36,7 @@ from fedbiomed.researcher.monitor import Monitor
 from fedbiomed.researcher.requests import Requests
 from fedbiomed.researcher.strategies.default_strategy import DefaultStrategy
 from fedbiomed.researcher.strategies.strategy import Strategy
+from fedbiomed.researcher.unlearning import UnlearningManager
 
 from ._federated_workflow import exp_exceptions
 from ._training_plan_workflow import TrainingPlanWorkflow
@@ -132,6 +133,7 @@ class Experiment(TrainingPlanWorkflow):
         self._aggregated_params = {}
         self._training_replies: Dict = {}
         self._retain_full_history = None
+        self._unlearning_manager = None
 
         # initialize object
         super().__init__(*args, **kwargs)
@@ -158,6 +160,40 @@ class Experiment(TrainingPlanWorkflow):
 
         # whether to retain the full experiment history or not
         self.set_retain_full_history(retain_full_history)
+
+        # unlearning manager (dry-run scaffolding)
+        self._unlearning_manager = UnlearningManager(self)
+
+    @exp_exceptions
+    def plan_unlearning(
+        self,
+        node_ids: List[str],
+        from_round: Optional[int] = None,
+        mode: str = "sifu",
+    ) -> Dict:
+        """Produces a dry-run unlearning plan for this experiment."""
+        return self._unlearning_manager.plan_unlearning(
+            node_ids=node_ids, from_round=from_round, mode=mode
+        )
+
+    @exp_exceptions
+    def unlearn(
+        self,
+        node_ids: List[str],
+        from_round: Optional[int] = None,
+        mode: str = "sifu",
+        dry_run: bool = True,
+    ) -> Dict:
+        """Runs (or plans) federated unlearning for this experiment.
+
+        Current implementation supports dry-run planning only.
+        """
+        return self._unlearning_manager.unlearn(
+            node_ids=node_ids,
+            from_round=from_round,
+            mode=mode,
+            dry_run=dry_run,
+        )
 
     @exp_exceptions
     def __del__(self):

@@ -33,6 +33,8 @@ from fedbiomed.common.message import (
     SecaggRequest,
     TrainingPlanStatusRequest,
     TrainRequest,
+    UnlearnReply,
+    UnlearnRequest,
 )
 from fedbiomed.common.synchro import EventWaitExchange
 from fedbiomed.common.tasks_queue import TasksQueue
@@ -231,6 +233,7 @@ class Node:
                         | AdditiveSSSetupRequest.__name__
                         | FARequest.__name__
                         | PreprocRequest.__name__
+                        | UnlearnRequest.__name__
                     ):
                         self.add_task(message)
                     case SecaggDeleteRequest.__name__:
@@ -612,6 +615,25 @@ class Node:
                             logger.security_event(
                                 operation="preprocessing_complete",
                                 status="success",
+                            )
+                        case UnlearnRequest.__name__:
+                            self._grpc_client.send(
+                                UnlearnReply(
+                                    request_id=item.request_id,
+                                    researcher_id=item.researcher_id,
+                                    experiment_id=item.experiment_id,
+                                    success=False,
+                                    node_id=self._node_id,
+                                    node_name=self._node_name,
+                                    msg=(
+                                        "Unlearning endpoint scaffold is available, but execution "
+                                        "is not implemented on node yet"
+                                    ),
+                                    forget_node_ids=item.forget_node_ids,
+                                    dry_run=item.dry_run,
+                                    from_round=item.from_round,
+                                    to_round=item.to_round,
+                                )
                             )
                         case _:
                             errmess = (
