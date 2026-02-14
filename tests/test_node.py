@@ -23,6 +23,7 @@ from fedbiomed.common.message import (
     SecaggRequest,
     TrainingPlanStatusRequest,
     TrainRequest,
+    UnlearnRequest,
 )
 from fedbiomed.node.node import Node, NodeConfig
 from fedbiomed.node.round import Round
@@ -97,6 +98,16 @@ class TestNode(unittest.TestCase):
         preproc_step=5,
         preproc_args={"dummy_arg": 42},
         state_id="my_state_id_xyz",
+    )
+
+    unlearn_request = UnlearnRequest(
+        researcher_id="researcher-id",
+        experiment_id="experiment-id",
+        forget_node_ids=["node-a"],
+        mode="sifu",
+        dry_run=True,
+        from_round=0,
+        to_round=2,
     )
 
     @classmethod
@@ -643,6 +654,54 @@ class TestNode(unittest.TestCase):
 
         mock_job_instance.run.assert_called_once()
         self.grpc_send_mock.assert_called_once()
+
+
+    def test_node_on_message_unlearn_request(self):
+        """Tests `on_message` method with UnlearnRequest"""
+        with patch.object(self.n1, "add_task") as mock_add_task:
+            self.n1.on_message(self.unlearn_request.to_dict())
+            mock_add_task.assert_called_once()
+            args, _ = mock_add_task.call_args
+            self.assertIsInstance(args[0], UnlearnRequest)
+
+    @patch("fedbiomed.common.tasks_queue.TasksQueue.get")
+    @patch("fedbiomed.common.tasks_queue.TasksQueue.task_done")
+    def test_node_task_manager_unlearn_request_dry_run(self, mock_task_done, mock_get):
+        """Tests `task_manager` with dry-run UnlearnRequest"""
+        mock_get.side_effect = [self.unlearn_request, SystemExit]
+
+        with self.assertRaises(SystemExit):
+            self.n1.task_manager()
+
+        self.grpc_send_mock.assert_called_once()
+        sent_reply = self.grpc_send_mock.call_args[0][1]
+        self.assertTrue(sent_reply.success)
+        self.assertTrue(sent_reply.dry_run)
+
+    @patch("fedbiomed.common.tasks_queue.TasksQueue.get")
+    @patch("fedbiomed.common.tasks_queue.TasksQueue.task_done")
+    def test_node_task_manager_unlearn_request_execute_not_implemented(
+        self, mock_task_done, mock_get
+    ):
+        """Tests `task_manager` with non-dry-run UnlearnRequest"""
+        execute_req = UnlearnRequest(
+            researcher_id="researcher-id",
+            experiment_id="experiment-id",
+            forget_node_ids=["node-a"],
+            mode="sifu",
+            dry_run=False,
+            from_round=0,
+            to_round=2,
+        )
+        mock_get.side_effect = [execute_req, SystemExit]
+
+        with self.assertRaises(SystemExit):
+            self.n1.task_manager()
+
+        self.grpc_send_mock.assert_called_once()
+        sent_reply = self.grpc_send_mock.call_args[0][1]
+        self.assertFalse(sent_reply.success)
+        self.assertFalse(sent_reply.dry_run)
 
 
 if __name__ == "__main__":  # pragma: no cover
